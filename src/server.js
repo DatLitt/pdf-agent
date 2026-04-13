@@ -1,7 +1,17 @@
 import express from "express";
 import dotenv from "dotenv";
+import fs from "fs";
 
 dotenv.config();
+
+const ensureFolder = (path) => {
+  if (!fs.existsSync(path)) {
+    fs.mkdirSync(path, { recursive: true });
+  }
+};
+
+ensureFolder("uploads");
+ensureFolder("temp");
 
 const app = express();
 
