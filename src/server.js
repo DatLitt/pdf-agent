@@ -1,6 +1,12 @@
 import express from "express";
 import dotenv from "dotenv";
 import fs from "fs";
+import { callLLM } from "./agent/llm.js";
+
+/////TESTING HEREEE //////
+const res = await callLLM("Say hello in JSON format");
+console.log(`Gemini says: ${res}`);
+/////////////////////////
 
 dotenv.config();
 
