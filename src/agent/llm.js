@@ -3,14 +3,123 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-const genAI = new GoogleGenAI(process.env.GEMINI_API_KEY);
+const genAI = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+});
 
-// test function
-export async function callLLM(prompt) {
+const stepSchema = {
+  type: "object",
+  properties: {
+    operation: {
+      type: "string",
+      enum: ["merge", "split", "insert", "delete", "reorder"],
+    },
+    files: {
+      type: "array",
+      items: {
+        type: "string",
+      },
+      minItems: 1,
+      maxItems: 2,
+    },
+    options: {
+      type: "object",
+      additionalProperties: true,
+    },
+  },
+  required: ["operation", "files", "options"],
+  additionalProperties: false,
+};
+
+const workflowSchema = {
+  type: "object",
+  properties: {
+    steps: {
+      type: "array",
+      items: stepSchema,
+      minItems: 1,
+      maxItems: 10,
+    },
+  },
+  required: ["steps"],
+  additionalProperties: false,
+};
+
+export async function parsePdfAction(prompt, files = [], context = {}) {
+  const fileNames = files.map((file) => file.originalname || file);
+  const feedback = context.feedback ? `\nPrevious error: ${context.feedback}` : "";
+  const lastAction = context.lastAction
+    ? `\nPrevious action: ${JSON.stringify(context.lastAction)}`
+    : "";
+
+  const systemPrompt = `
+You are a PDF action planner.
+Return ONLY valid JSON.
+Allowed operations: merge, split, insert, delete, reorder.
+
+Return a workflow object with this shape:
+{
+  "steps": [
+    {
+      "operation": "merge",
+      "files": ["file1.pdf", "file2.pdf"],
+      "options": {}
+    }
+  ]
+}
+
+Workflow rules:
+- "steps" must contain 1 to 10 actions
+- Each step must follow the existing action rules
+- A step can reference the previous step output by using "__previous__" in files
+- Use "__previous__" only when chaining a later step from a prior step output
+- Do not use "__previous__" in the first step
+- If a step is split, it should usually be the last step because it returns multiple PDFs
+
+Rules:
+- Never return markdown or extra text.
+- Never mention files not provided.
+- Never assume more than 2 files.
+- If the operation is merge or insert, use exactly 2 files.
+- If the operation is split, delete, or reorder, use exactly 1 file.
+- If no options are needed, use an empty object.
+
+Examples:
+{"steps":[{"operation":"merge","files":["file1.pdf","file2.pdf"],"options":{}},{"operation":"merge","files":["__previous__","file1.pdf"],"options":{}}]}
+{"steps":[{"operation":"split","files":["file1.pdf"],"options":{"ranges":[[1,3],[5,6]]}}]}
+{"steps":[{"operation":"insert","files":["file1.pdf","file2.pdf"],"options":{"position":2}}]}
+{"steps":[{"operation":"delete","files":["file1.pdf"],"options":{"pages":[2,4]}}]}
+{"steps":[{"operation":"reorder","files":["file1.pdf"],"options":{"pages":[3,1,2]}}]}
+`;
+
+  const userPrompt = `
+User prompt: ${prompt}
+Available files: ${JSON.stringify(fileNames)}
+${feedback}${lastAction}
+`;
+
   const result = await genAI.models.generateContent({
     model: "gemini-2.5-flash",
-    contents: prompt,
+    contents: [
+      { role: "user", parts: [{ text: systemPrompt }] },
+      { role: "user", parts: [{ text: userPrompt }] },
+    ],
+    config: {
+      responseMimeType: "application/json",
+      responseJsonSchema: workflowSchema,
+      temperature: 0,
+    },
   });
 
-  return result.text;
+  const rawText = result.text?.trim() || "";
+
+  if (!rawText) {
+    throw new Error("LLM returned an empty response");
+  }
+
+  try {
+    return JSON.parse(rawText);
+  } catch {
+    throw new Error("LLM returned invalid JSON");
+  }
 }
