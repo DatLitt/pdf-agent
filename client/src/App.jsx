@@ -8,6 +8,8 @@ const examples = [
   "reorder the first PDF pages as 3,1,2",
 ];
 
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
+
 export default function App() {
   const [prompt, setPrompt] = useState("");
   const [files, setFiles] = useState([]);
@@ -40,7 +42,7 @@ export default function App() {
         formData.append("files", file);
       }
 
-      const response = await fetch(endpoint, {
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: "POST",
         body: formData,
       });
