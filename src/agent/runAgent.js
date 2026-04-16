@@ -6,6 +6,7 @@ import {
 import { executePdfAction } from "../tools/runTool.js";
 
 export const MAX_AGENT_STEPS = 10;
+const MAX_VALIDATION_RETRIES = 2;
 
 export function assertAgentStepLimit(stepCount) {
   if (!Number.isInteger(stepCount) || stepCount < 0) {
@@ -17,15 +18,33 @@ export function assertAgentStepLimit(stepCount) {
   }
 }
 
+const isGeminiQuotaError = (error) => {
+  const message = String(error?.message || "");
+
+  return (
+    message.includes("RESOURCE_EXHAUSTED") ||
+    message.includes("Quota exceeded") ||
+    message.includes("429") ||
+    message.includes("503") ||
+    message.includes("UNAVAILABLE")
+  );
+};
+
 const getUploadedFileMap = (files) => {
   const map = new Map();
 
   for (const file of files || []) {
-    map.set(file.originalname || file.filename, file);
+    map.set(file.fileId, file);
   }
 
   return map;
 };
+
+const normalizeFiles = (files = []) =>
+  files.map((file, index) => ({
+    ...file,
+    fileId: `file_${index + 1}`,
+  }));
 
 const resolveStepFiles = (stepFiles, uploadedFiles, previousOutputFile) => {
   const uploadedFileMap = getUploadedFileMap(uploadedFiles);
@@ -102,6 +121,7 @@ const executeWorkflow = async (workflow, uploadedFiles) => {
 };
 
 export async function runPdfAgent(prompt, files = []) {
+  const normalizedFiles = normalizeFiles(files);
   let feedback = "";
   let lastAction = null;
 
@@ -116,17 +136,39 @@ export async function runPdfAgent(prompt, files = []) {
         feedback,
         lastAction,
         attempt,
+        files: normalizedFiles,
       });
 
       console.log("LLM workflow:", JSON.stringify(workflow, null, 2));
 
-      validatePdfAction(workflow, files);
-      return await executeWorkflow(workflow, files);
+      validatePdfAction(workflow, normalizedFiles);
+      return await executeWorkflow(workflow, normalizedFiles);
     } catch (error) {
       console.log(`Agent attempt ${attempt + 1} failed: ${error.message}`);
+
+      if (isGeminiQuotaError(error)) {
+        throw new Error(
+          "Gemini rate limit or quota reached. Please wait and try again."
+        );
+      }
+
       feedback = error.message;
       if (workflow) {
         lastAction = workflow;
+      }
+
+      const isValidationIssue =
+        error.message.includes("Action must") ||
+        error.message.includes("requires") ||
+        error.message.includes("Unsupported operation") ||
+        error.message.includes("Unknown file referenced") ||
+        error.message.includes("Split ranges must") ||
+        error.message.includes("Each workflow step must");
+
+      if (isValidationIssue && attempt >= MAX_VALIDATION_RETRIES - 1) {
+        throw new Error(
+          `Agent failed after ${attempt + 1} attempts: ${error.message}`
+        );
       }
 
       if (attempt === MAX_AGENT_STEPS - 1) {

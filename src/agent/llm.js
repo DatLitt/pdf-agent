@@ -7,19 +7,19 @@ const genAI = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
 });
 
-const stepSchema = {
+const mergeStepSchema = {
   type: "object",
   properties: {
     operation: {
       type: "string",
-      enum: ["merge", "split", "insert", "delete", "reorder"],
+      const: "merge",
     },
     files: {
       type: "array",
       items: {
         type: "string",
       },
-      minItems: 1,
+      minItems: 2,
       maxItems: 2,
     },
     options: {
@@ -31,12 +31,125 @@ const stepSchema = {
   additionalProperties: false,
 };
 
+const splitStepSchema = {
+  type: "object",
+  properties: {
+    operation: {
+      type: "string",
+      const: "split",
+    },
+    files: {
+      type: "array",
+      items: {
+        type: "string",
+      },
+      minItems: 1,
+      maxItems: 1,
+    },
+    options: {
+      type: "object",
+      properties: {
+        ranges: {
+          type: "array",
+          items: {
+            type: "array",
+            items: {
+              type: "integer",
+            },
+            minItems: 2,
+            maxItems: 2,
+          },
+          minItems: 1,
+        },
+      },
+      required: ["ranges"],
+      additionalProperties: false,
+    },
+  },
+  required: ["operation", "files", "options"],
+  additionalProperties: false,
+};
+
+const insertStepSchema = {
+  type: "object",
+  properties: {
+    operation: {
+      type: "string",
+      const: "insert",
+    },
+    files: {
+      type: "array",
+      items: {
+        type: "string",
+      },
+      minItems: 2,
+      maxItems: 2,
+    },
+    options: {
+      type: "object",
+      properties: {
+        position: {
+          type: "integer",
+          minimum: 1,
+        },
+      },
+      required: ["position"],
+      additionalProperties: false,
+    },
+  },
+  required: ["operation", "files", "options"],
+  additionalProperties: false,
+};
+
+const pageListStepSchema = (operation) => ({
+  type: "object",
+  properties: {
+    operation: {
+      type: "string",
+      const: operation,
+    },
+    files: {
+      type: "array",
+      items: {
+        type: "string",
+      },
+      minItems: 1,
+      maxItems: 1,
+    },
+    options: {
+      type: "object",
+      properties: {
+        pages: {
+          type: "array",
+          items: {
+            type: "integer",
+            minimum: 1,
+          },
+          minItems: 1,
+        },
+      },
+      required: ["pages"],
+      additionalProperties: false,
+    },
+  },
+  required: ["operation", "files", "options"],
+  additionalProperties: false,
+});
+
 const workflowSchema = {
   type: "object",
   properties: {
     steps: {
       type: "array",
-      items: stepSchema,
+      items: {
+        oneOf: [
+          mergeStepSchema,
+          splitStepSchema,
+          insertStepSchema,
+          pageListStepSchema("delete"),
+          pageListStepSchema("reorder"),
+        ],
+      },
       minItems: 1,
       maxItems: 10,
     },
@@ -46,7 +159,9 @@ const workflowSchema = {
 };
 
 export async function parsePdfAction(prompt, files = [], context = {}) {
-  const fileNames = files.map((file) => file.originalname || file);
+  const fileEntries = (context.files || files).map(
+    (file) => `${file.fileId || file.originalname || file}: ${file.originalname || file}`
+  );
   const feedback = context.feedback ? `\nPrevious error: ${context.feedback}` : "";
   const lastAction = context.lastAction
     ? `\nPrevious action: ${JSON.stringify(context.lastAction)}`
@@ -78,6 +193,8 @@ Workflow rules:
 
 Rules:
 - Never return markdown or extra text.
+- Files must be referenced only by their IDs: file_1, file_2.
+- Do not use original file names in the workflow.
 - Never mention files not provided.
 - Never assume more than 2 files.
 - If the operation is merge or insert, use exactly 2 files.
@@ -94,7 +211,8 @@ Examples:
 
   const userPrompt = `
 User prompt: ${prompt}
-Available files: ${JSON.stringify(fileNames)}
+Available files:
+${fileEntries.join("\n")}
 ${feedback}${lastAction}
 `;
 

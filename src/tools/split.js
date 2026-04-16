@@ -67,5 +67,5 @@ export async function splitPDF(file, ranges) {
     outputs.push(outputPath);
   }
 
-  return outputs;
+  return outputs.length === 1 ? outputs[0] : outputs;
 }

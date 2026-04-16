@@ -11,6 +11,14 @@ const PREVIOUS_OUTPUT_TOKEN = "__previous__";
 const isPositiveInteger = (value) =>
   Number.isInteger(value) && value > 0;
 
+const isSplitRange = (range) =>
+  Array.isArray(range) &&
+  range.length === 2 &&
+  Number.isInteger(range[0]) &&
+  Number.isInteger(range[1]) &&
+  range[0] > 0 &&
+  range[1] >= range[0];
+
 const validateOptions = (operation, options = {}) => {
   if (typeof options !== "object" || Array.isArray(options)) {
     throw new Error("Action options must be an object");
@@ -21,6 +29,12 @@ const validateOptions = (operation, options = {}) => {
 
     if (!Array.isArray(ranges) || ranges.length === 0) {
       throw new Error("Split requires options.ranges");
+    }
+
+    for (const range of ranges) {
+      if (!isSplitRange(range)) {
+        throw new Error("Split ranges must be [start, end] integer pairs");
+      }
     }
   }
 
@@ -50,9 +64,7 @@ const validateStepFiles = (stepFiles, uploadedFiles, allowPrevious) => {
     throw new Error("Each step cannot reference more than 2 files");
   }
 
-  const availableFiles = (uploadedFiles || []).map(
-    (file) => file.originalname || file
-  );
+  const availableFiles = (uploadedFiles || []).map((file) => file.fileId);
 
   let previousCount = 0;
 

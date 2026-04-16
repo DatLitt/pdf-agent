@@ -24,8 +24,12 @@ export default function App() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    await runRequest("/execute", "Running agent...");
+  };
+
+  const runRequest = async (endpoint, busyLabel) => {
     setBusy(true);
-    setStatus("Running agent...");
+    setStatus(busyLabel);
     setResult(null);
 
     try {
@@ -36,7 +40,7 @@ export default function App() {
         formData.append("files", file);
       }
 
-      const response = await fetch("/execute", {
+      const response = await fetch(endpoint, {
         method: "POST",
         body: formData,
       });
@@ -57,7 +61,11 @@ export default function App() {
       } else {
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
-        setResult({ type: "pdf", url });
+        const disposition = response.headers.get("content-disposition") || "";
+        const filenameMatch = disposition.match(/filename="([^"]+)"/i);
+        const downloadName = filenameMatch?.[1] || (contentType.includes("zip") ? "result.zip" : "result.pdf");
+
+        setResult({ type: "file", url, downloadName });
         setStatus("Done");
       }
     } catch (error) {
@@ -130,9 +138,9 @@ export default function App() {
             <strong>{status}</strong>
           </div>
 
-          {result?.type === "pdf" && (
-            <a className="download" href={result.url} download="result.pdf">
-              Download result.pdf
+          {result?.type === "file" && (
+            <a className="download" href={result.url} download={result.downloadName}>
+              Download {result.downloadName}
             </a>
           )}
 

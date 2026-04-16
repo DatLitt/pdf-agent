@@ -5,6 +5,7 @@ import path from "path";
 import multer from "multer";
 import { promises as fsp } from "fs";
 import { runPdfAgent } from "./agent/runAgent.js";
+import { createZipFromFiles } from "./tools/createZip.js";
 
 dotenv.config();
 
@@ -69,7 +70,8 @@ app.get("/", (req, res) => {
 });
 
 app.post("/upload", upload.array("files", 2), (req, res) => {
-  const files = (req.files || []).map((file) => ({
+  const files = (req.files || []).map((file, index) => ({
+    fileId: `file_${index + 1}`,
     originalName: file.originalname,
     storedName: file.filename,
     path: file.path,
@@ -80,30 +82,6 @@ app.post("/upload", upload.array("files", 2), (req, res) => {
     count: files.length,
     files,
   });
-});
-
-app.post("/plan", upload.array("files", 2), async (req, res, next) => {
-  try {
-    const prompt = req.body?.prompt?.trim();
-
-    if (!prompt) {
-      return res.status(400).json({ error: "Prompt is required" });
-    }
-
-    const files = req.files || [];
-    const { parsePdfAction } = await import("./agent/llm.js");
-    const { validatePdfAction } = await import("./agent/validateAction.js");
-    const action = await parsePdfAction(prompt, files);
-    console.log("PLANNED ACTION:", JSON.stringify(action, null, 2));
-    validatePdfAction(action, files);
-
-    res.json({
-      message: "Action parsed successfully",
-      action,
-    });
-  } catch (error) {
-    next(error);
-  }
 });
 
 app.post("/execute", upload.array("files", 2), async (req, res, next) => {
@@ -117,19 +95,23 @@ app.post("/execute", upload.array("files", 2), async (req, res, next) => {
     const files = req.files || [];
     const result = await runPdfAgent(prompt, files);
 
-    if (Array.isArray(result.output)) {
-      res.json({
-        message: "Split completed successfully",
-        files: result.output,
-        stepsUsed: result.stepsUsed,
-      });
+    if (Array.isArray(result.output) && result.output.length > 1) {
+      const zipPath = await createZipFromFiles(result.output);
 
-      return cleanupPaths(result.cleanupPaths);
+      return res.download(zipPath, "result.zip", async () => {
+        await cleanupPaths(result.cleanupPaths);
+        await cleanupPaths(result.output);
+        await cleanupPaths([zipPath]);
+      });
     }
 
-    return res.download(result.output, "result.pdf", async () => {
+    const singleOutput = Array.isArray(result.output)
+      ? result.output[0]
+      : result.output;
+
+    return res.download(singleOutput, "result.pdf", async () => {
       await cleanupPaths(result.cleanupPaths);
-      await cleanupPaths([result.output]);
+      await cleanupPaths([singleOutput]);
     });
   } catch (error) {
     next(error);
