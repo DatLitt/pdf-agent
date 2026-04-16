@@ -8,16 +8,22 @@ const examples = [
   "reorder the first PDF pages as 3,1,2",
 ];
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(
+  /\/$/,
+  "",
+);
 
 export default function App() {
   const [prompt, setPrompt] = useState("");
   const [files, setFiles] = useState([]);
-  const [status, setStatus] = useState("Idle");
+  const [status, setStatus] = useState("Idle.");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
 
-  const canSubmit = useMemo(() => prompt.trim().length > 0 && files.length > 0, [prompt, files]);
+  const canSubmit = useMemo(
+    () => prompt.trim().length > 0 && files.length > 0,
+    [prompt, files],
+  );
 
   const handleFileChange = (event) => {
     const selected = Array.from(event.target.files || []).slice(0, 2);
@@ -65,7 +71,9 @@ export default function App() {
         const url = URL.createObjectURL(blob);
         const disposition = response.headers.get("content-disposition") || "";
         const filenameMatch = disposition.match(/filename="([^"]+)"/i);
-        const downloadName = filenameMatch?.[1] || (contentType.includes("zip") ? "result.zip" : "result.pdf");
+        const downloadName =
+          filenameMatch?.[1] ||
+          (contentType.includes("zip") ? "result.zip" : "result.pdf");
 
         setResult({ type: "file", url, downloadName });
         setStatus("Done");
@@ -88,7 +96,8 @@ export default function App() {
           <p className="eyebrow">AI-Powered PDF</p>
           <h1>Prompt-driven PDF editing with AI.</h1>
           <p className="subhead">
-            Upload up to 2 PDFs, describe the change in plain English, and let the backend build the right PDF workflow.
+            Upload up to 2 PDFs, describe the change in plain English, and let
+            the backend build the right PDF workflow.
           </p>
         </section>
 
@@ -118,18 +127,29 @@ export default function App() {
 
           <label className="field">
             <span>PDF files</span>
-            <input type="file" accept=".pdf" multiple onChange={handleFileChange} />
+            <input
+              type="file"
+              accept=".pdf"
+              multiple
+              onChange={handleFileChange}
+            />
           </label>
 
           <div className="file-list">
             {files.length === 0 ? (
               <p>No files selected.</p>
             ) : (
-              files.map((file) => <div key={`${file.name}-${file.size}`}>{file.name}</div>)
+              files.map((file) => (
+                <div key={`${file.name}-${file.size}`}>{file.name}</div>
+              ))
             )}
           </div>
 
-          <button className="button" type="submit" disabled={!canSubmit || busy}>
+          <button
+            className="button"
+            type="submit"
+            disabled={!canSubmit || busy}
+          >
             {busy ? "Working..." : "Process PDF"}
           </button>
         </form>
@@ -141,16 +161,24 @@ export default function App() {
           </div>
 
           {result?.type === "file" && (
-            <a className="download" href={result.url} download={result.downloadName}>
+            <a
+              className="download"
+              href={result.url}
+              download={result.downloadName}
+            >
               Download {result.downloadName}
             </a>
           )}
 
           {result?.type === "json" && (
-            <pre className="result-json">{JSON.stringify(result.data, null, 2)}</pre>
+            <pre className="result-json">
+              {JSON.stringify(result.data, null, 2)}
+            </pre>
           )}
 
-          {result?.type === "error" && <p className="error">{result.message}</p>}
+          {result?.type === "error" && (
+            <p className="error">{result.message}</p>
+          )}
         </section>
       </main>
     </div>
