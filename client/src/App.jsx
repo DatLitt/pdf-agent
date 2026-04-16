@@ -26,7 +26,7 @@ export default function App() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    await runRequest("/execute", "Running agent...");
+    await runRequest("/execute", "Processing PDF...");
   };
 
   const runRequest = async (endpoint, busyLabel) => {
@@ -85,10 +85,10 @@ export default function App() {
 
       <main className="card">
         <section className="hero">
-          <p className="eyebrow">PDF Agent</p>
-          <h1>Prompt-driven PDF editing, with a clean React UI.</h1>
+          <p className="eyebrow">AI-Powered PDF</p>
+          <h1>Prompt-driven PDF editing with AI.</h1>
           <p className="subhead">
-            Upload up to 2 PDFs, describe the change in plain English, and let the backend pick the right PDF action.
+            Upload up to 2 PDFs, describe the change in plain English, and let the backend build the right PDF workflow.
           </p>
         </section>
 
@@ -130,7 +130,7 @@ export default function App() {
           </div>
 
           <button className="button" type="submit" disabled={!canSubmit || busy}>
-            {busy ? "Working..." : "Run Agent"}
+            {busy ? "Working..." : "Process PDF"}
           </button>
         </form>
 
