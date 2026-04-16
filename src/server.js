@@ -9,6 +9,13 @@ import { createZipFromFiles } from "./tools/createZip.js";
 
 dotenv.config();
 
+const FRONTEND_ORIGINS = new Set(
+  (process.env.FRONTEND_ORIGINS || process.env.FRONTEND_ORIGIN || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+);
+
 const ensureFolder = (folderPath) => {
   if (!fs.existsSync(folderPath)) {
     fs.mkdirSync(folderPath, { recursive: true });
@@ -33,6 +40,23 @@ const cleanupPaths = async (paths = []) => {
 const app = express();
 
 app.use(express.json());
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+
+  if (origin && (FRONTEND_ORIGINS.size === 0 || FRONTEND_ORIGINS.has(origin))) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  }
+
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+
+  next();
+});
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
